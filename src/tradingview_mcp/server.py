@@ -41,6 +41,15 @@ from tradingview_mcp.core.services.egx_service import (
     generate_egx_trade_plan,
     analyze_egx_fibonacci,
 )
+from tradingview_mcp.core.services.bist_service import (
+    get_bist_market_overview,
+    scan_bist_sector,
+    run_bist_sector_scanner,
+    analyze_bist_index,
+    screen_bist_stocks,
+    generate_bist_trade_plan,
+    analyze_bist_fibonacci,
+)
 from tradingview_mcp.core.services.sentiment_service import analyze_sentiment
 from tradingview_mcp.core.services.news_service import fetch_news_summary
 from tradingview_mcp.core.services.yahoo_finance_service import (
@@ -449,6 +458,120 @@ def egx_fibonacci_retracement(symbol: str, lookback: str = "52W", timeframe: str
     timeframe = sanitize_timeframe(timeframe, "1D")
     lookback = lookback.strip().upper()
     return analyze_egx_fibonacci(symbol, lookback, timeframe)
+
+
+# ── BIST (Borsa Istanbul) tools ────────────────────────────────────────────────
+
+@mcp.tool()
+def bist_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
+    """Comprehensive overview of Borsa Istanbul (BIST) — top gainers, losers, most active.
+
+    Args:
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D for stocks)
+        limit: Number of stocks per category (max 20)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    limit = max(1, min(limit, 20))
+    return get_bist_market_overview(timeframe, limit)
+
+
+@mcp.tool()
+def bist_sector_scan(sector: str = "", timeframe: str = "1D", limit: int = 20) -> dict:
+    """Scan BIST stocks by sector. Shows available sectors if none specified.
+
+    Args:
+        sector: Sector name (banks, holding, food_and_beverages, chemicals_and_petrochemicals,
+                automotive, real_estate_reits, electricity_and_energy, etc.)
+                Leave empty to list all sectors.
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        limit: Max results per sector (max 50)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    limit = max(1, min(limit, 50))
+    return scan_bist_sector(sector, timeframe, limit)
+
+
+@mcp.tool()
+def bist_sector_scanner(
+    timeframe: str = "1D",
+    top_n_sectors: int = 5,
+    top_n_stocks: int = 3,
+    min_stock_score: int = 60,
+) -> dict:
+    """Sector rotation scanner for BIST — identifies hot/cold sectors and top picks.
+
+    Args:
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+        top_n_sectors: Number of top sectors to show stock picks for (1-23, default 5)
+        top_n_stocks: Number of top stocks per highlighted sector (1-10, default 3)
+        min_stock_score: Minimum stock score for picks (0-100, default 60)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    top_n_sectors = max(1, min(23, top_n_sectors))
+    top_n_stocks = max(1, min(10, top_n_stocks))
+    min_stock_score = max(0, min(100, min_stock_score))
+    return run_bist_sector_scanner(timeframe, top_n_sectors, top_n_stocks, min_stock_score)
+
+
+@mcp.tool()
+def bist_index_analysis(index: str = "BIST30", timeframe: str = "1D", limit: int = 30) -> dict:
+    """Analyse a BIST index showing constituent performance with full indicators.
+
+    Args:
+        index: BIST30, BIST50, BIST100, BISTKATILIM
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+        limit: Number of stocks to show in detail (max 100)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    limit = max(1, min(limit, 100))
+    return analyze_bist_index(index, timeframe, limit)
+
+
+@mcp.tool()
+def bist_stock_screener(
+    timeframe: str = "1D",
+    min_score: int = 55,
+    index_filter: str = "",
+    limit: int = 20,
+) -> dict:
+    """Production stock ranking engine for BIST — finds strong stocks with actionable setups.
+
+    Args:
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+        min_score: Minimum stock score to include (0-100, default 55)
+        index_filter: Filter by index — BIST30, BIST50, BIST100, BISTKATILIM
+        limit: Number of results (max 50)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    min_score = max(0, min(100, min_score))
+    limit = max(1, min(50, limit))
+    return screen_bist_stocks(timeframe, min_score, index_filter, limit)
+
+
+@mcp.tool()
+def bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+    """Generate a full trade plan for a specific BIST stock.
+
+    Args:
+        symbol: BIST stock symbol (e.g., "THYAO", "GARAN", "AKBNK", "ASELS")
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    return generate_bist_trade_plan(symbol, timeframe)
+
+
+@mcp.tool()
+def bist_fibonacci_retracement(symbol: str, lookback: str = "52W", timeframe: str = "1D") -> dict:
+    """Fibonacci retracement analysis for BIST stocks.
+
+    Args:
+        symbol: BIST stock symbol (e.g., "THYAO", "GARAN", "ASELS")
+        lookback: Period for swing high/low — "1M", "3M", "6M", "52W", "ALL" (default 52W)
+        timeframe: Analysis timeframe (5m, 15m, 1h, 4h, 1D, 1W, 1M — default 1D)
+    """
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    lookback = lookback.strip().upper()
+    return analyze_bist_fibonacci(symbol, lookback, timeframe)
 
 
 # ── Multi-timeframe analysis ───────────────────────────────────────────────────
