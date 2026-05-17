@@ -11,7 +11,7 @@ Borsa Istanbul revises index compositions periodically (typically every
 TradingView's screener and fall back to the static list on failure.
 """
 from __future__ import annotations
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 # ── Static constituent baselines ───────────────────────────────────────────────
@@ -193,12 +193,16 @@ _TV_INDEX_CODES: Dict[str, str] = {
 def _fetch_index_constituents_dynamic(index_key: str) -> Optional[List[str]]:
     """Try to fetch live BIST index members via TradingView screener.
 
+    The scanner has no server-side filter for index membership — the `index`
+    column rejects filter clauses with HTTP 400. So we pull the whole Turkey
+    universe (~630 stocks, single request) with the `indexes` field, then
+    match client-side on the requested index `proname`.
+
     Returns symbols prefixed with `BIST:`, or None if the live fetch
     fails (caller should fall back to the static list).
     """
     try:
         from tradingview_screener import Query
-        from tradingview_screener.column import Column
     except Exception:
         return None
 
@@ -210,18 +214,23 @@ def _fetch_index_constituents_dynamic(index_key: str) -> Optional[List[str]]:
         q = (
             Query()
             .set_markets("turkey")
-            .select("name")
-            .where(Column("index").like(tv_code))
-            .limit(150)
+            .select("name", "indexes")
+            .limit(1000)
         )
         _, df = q.get_scanner_data()
         if df is None or df.empty:
             return None
         out: List[str] = []
         for _, row in df.iterrows():
-            tk = row.get("ticker")
-            if tk and isinstance(tk, str):
-                out.append(tk if ":" in tk else f"BIST:{tk}")
+            memberships = row.get("indexes") or []
+            if not isinstance(memberships, list):
+                continue
+            for ix in memberships:
+                if isinstance(ix, dict) and ix.get("proname") == tv_code:
+                    tk = row.get("ticker")
+                    if tk and isinstance(tk, str):
+                        out.append(tk if ":" in tk else f"BIST:{tk}")
+                    break
         return out or None
     except Exception:
         return None
@@ -254,6 +263,30 @@ def get_bist100_symbols(prefer_dynamic: bool = True) -> List[str]:
     return get_bist100_symbols_static()
 
 
+def _with_source(index_key: str, static_fn) -> Tuple[List[str], str]:
+    """Return (symbols, source) where source is 'dynamic' or 'static'.
+
+    Reports the true fetch outcome — useful for callers that surface
+    constituent freshness to users.
+    """
+    live = _fetch_index_constituents_dynamic(index_key)
+    if live:
+        return live, "dynamic (TradingView screener)"
+    return static_fn(), "static baseline"
+
+
+def get_bist30_symbols_with_source() -> Tuple[List[str], str]:
+    return _with_source("BIST30", get_bist30_symbols_static)
+
+
+def get_bist50_symbols_with_source() -> Tuple[List[str], str]:
+    return _with_source("BIST50", get_bist50_symbols_static)
+
+
+def get_bist100_symbols_with_source() -> Tuple[List[str], str]:
+    return _with_source("BIST100", get_bist100_symbols_static)
+
+
 # ── Index metadata ─────────────────────────────────────────────────────────────
 
 BIST_INDICES: Dict[str, dict] = {
@@ -264,6 +297,7 @@ BIST_INDICES: Dict[str, dict] = {
         "constituents_count": len(BIST30_CONSTITUENTS),
         "get_symbols": get_bist30_symbols,
         "get_symbols_static": get_bist30_symbols_static,
+        "get_symbols_with_source": get_bist30_symbols_with_source,
     },
     "BIST50": {
         "name": "BIST 50 Index (XU050)",
@@ -272,6 +306,7 @@ BIST_INDICES: Dict[str, dict] = {
         "constituents_count": len(BIST50_CONSTITUENTS),
         "get_symbols": get_bist50_symbols,
         "get_symbols_static": get_bist50_symbols_static,
+        "get_symbols_with_source": get_bist50_symbols_with_source,
     },
     "BIST100": {
         "name": "BIST 100 Index (XU100)",
@@ -280,6 +315,7 @@ BIST_INDICES: Dict[str, dict] = {
         "constituents_count": len(BIST100_CONSTITUENTS),
         "get_symbols": get_bist100_symbols,
         "get_symbols_static": get_bist100_symbols_static,
+        "get_symbols_with_source": get_bist100_symbols_with_source,
     },
 }
 
