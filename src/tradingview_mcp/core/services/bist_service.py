@@ -1,11 +1,11 @@
 """
-EGX Service — all business logic for Egyptian Exchange (EGX) market tools.
+BIST Service — all business logic for Borsa Istanbul (BIST) market tools.
 
 Contains market overview, sector scanning, index analysis, stock screening,
 trade plan generation, and Fibonacci retracement analysis.
 
 All public functions return plain dicts / lists and are independently testable
-without the MCP layer.
+without the MCP layer. Mirrors the structure of `egx_service.py`.
 """
 from __future__ import annotations
 
@@ -22,10 +22,9 @@ from tradingview_mcp.core.services.indicators import (
     analyze_fibonacci_position,
     detect_trend_for_fibonacci,
 )
-from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, sanitize_timeframe
+from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER
 
 try:
-    # Patched: route through resilience layer (retry + 60s TTL cache).
     import tradingview_ta  # noqa: F401  presence check
     from tradingview_mcp.core.services.screener_provider import (
         resilient_get_multiple_analysis as get_multiple_analysis,
@@ -41,11 +40,14 @@ except ImportError:
     _SCREENER_AVAILABLE = False
 
 
+_BIST_SCREENER_MARKET = EXCHANGE_SCREENER.get("bist", "turkey")
+
+
 # ── Market Overview ────────────────────────────────────────────────────────────
 
-def get_egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
+def get_bist_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
     """
-    Comprehensive EGX market overview: top gainers, losers, most active.
+    Comprehensive BIST market overview: top gainers, losers, most active.
 
     Args:
         timeframe: TradingView interval (default '1D').
@@ -57,18 +59,21 @@ def get_egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
-    symbols = load_symbols("egx")
+    symbols = load_symbols("bist")
     if not symbols:
-        return {"error": "No EGX symbols found. Check coinlist/egx.txt"}
+        return {"error": "No BIST symbols found. Check coinlist/bist.txt"}
 
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
     all_stocks: List[dict] = []
     batch_size = 200
 
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = get_multiple_analysis(
+                screener=_BIST_SCREENER_MARKET,
+                interval=timeframe,
+                symbols=batch,
+            )
         except Exception:
             continue
 
@@ -96,13 +101,13 @@ def get_egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
                 continue
 
     if not all_stocks:
-        return {"error": "No data returned for EGX stocks", "timeframe": timeframe}
+        return {"error": "No data returned for BIST stocks", "timeframe": timeframe}
 
     by_change = sorted(all_stocks, key=lambda x: x["changePercent"], reverse=True)
     by_volume = sorted(all_stocks, key=lambda x: x["volume"] or 0, reverse=True)
 
     return {
-        "exchange": "EGX",
+        "exchange": "BIST",
         "timeframe": timeframe,
         "total_analyzed": len(all_stocks),
         "top_gainers": by_change[:limit],
@@ -122,9 +127,9 @@ def get_egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
 
 # ── Sector Scan ────────────────────────────────────────────────────────────────
 
-def scan_egx_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) -> dict:
+def scan_bist_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) -> dict:
     """
-    Scan EGX stocks by sector, or list all available sectors.
+    Scan BIST stocks by sector, or list all available sectors.
 
     Args:
         sector:    Sector key (empty string → list all sectors).
@@ -134,7 +139,7 @@ def scan_egx_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) ->
     Returns:
         Sector data dict or available sectors list.
     """
-    from tradingview_mcp.core.data.egx_sectors import (
+    from tradingview_mcp.core.data.bist_sectors import (
         get_all_sectors,
         get_symbols_by_sector,
         get_sector,
@@ -143,7 +148,7 @@ def scan_egx_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) ->
     if not sector:
         return {
             "available_sectors": get_all_sectors(),
-            "usage": "Pass a sector name to scan. Example: sector='banks'",
+            "usage": "Pass a sector name to scan. Example: sector='banking'",
         }
 
     if not _TA_AVAILABLE:
@@ -158,10 +163,12 @@ def scan_egx_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) ->
             "available_sectors": get_all_sectors(),
         }
 
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
-
     try:
-        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=symbols)
+        analysis = get_multiple_analysis(
+            screener=_BIST_SCREENER_MARKET,
+            interval=timeframe,
+            symbols=symbols,
+        )
     except Exception as exc:
         return {"error": f"Analysis failed: {exc}"}
 
@@ -199,7 +206,7 @@ def scan_egx_sector(sector: str = "", timeframe: str = "1D", limit: int = 20) ->
     avg_change = round(sum(sector_changes) / len(sector_changes), 2) if sector_changes else 0
 
     return {
-        "exchange": "EGX",
+        "exchange": "BIST",
         "sector": sector_key,
         "timeframe": timeframe,
         "total_stocks": len(results),
@@ -258,14 +265,14 @@ def _generate_rotation_signals(ranked_sectors: list) -> List[str]:
     return signals
 
 
-def run_egx_sector_scanner(
+def run_bist_sector_scanner(
     timeframe: str = "1D",
     top_n_sectors: int = 5,
     top_n_stocks: int = 3,
     min_stock_score: int = 60,
 ) -> dict:
     """
-    Full EGX sector rotation scanner — ranks all 18 sectors and surfaces picks.
+    Full BIST sector rotation scanner — ranks all sectors and surfaces picks.
 
     Args:
         timeframe:       TradingView interval (default '1D').
@@ -276,26 +283,23 @@ def run_egx_sector_scanner(
     Returns:
         Weighted market view, sector heatmap, top picks, and rotation signals.
     """
-    from tradingview_mcp.core.data.egx_sectors import (
-        EGX_SECTORS,
-        EGX_SECTOR_META,
+    from tradingview_mcp.core.data.bist_sectors import (
+        BIST_SECTORS,
+        BIST_SECTOR_META,
         SECTOR_DISPLAY_NAMES,
-        get_sector,
         get_currency,
     )
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
-
     # Step A: collect all sector symbols
     sector_symbol_map: Dict[str, List[str]] = {}
     all_symbols: List[str] = []
     symbol_to_sectors: Dict[str, List[str]] = {}
 
-    for sector_key, sym_set in EGX_SECTORS.items():
-        prefixed = [f"EGX:{s}" for s in sorted(sym_set)]
+    for sector_key, sym_set in BIST_SECTORS.items():
+        prefixed = [f"BIST:{s}" for s in sorted(sym_set)]
         sector_symbol_map[sector_key] = prefixed
         for s in prefixed:
             all_symbols.append(s)
@@ -309,7 +313,11 @@ def run_egx_sector_scanner(
     for i in range(0, len(unique_symbols), batch_size):
         batch = unique_symbols[i : i + batch_size]
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = get_multiple_analysis(
+                screener=_BIST_SCREENER_MARKET,
+                interval=timeframe,
+                symbols=batch,
+            )
             for sym, data in analysis.items():
                 if data is not None:
                     try:
@@ -324,7 +332,7 @@ def run_egx_sector_scanner(
             continue
 
     if not raw_data:
-        return {"error": "No data returned for EGX stocks", "timeframe": timeframe}
+        return {"error": "No data returned for BIST stocks", "timeframe": timeframe}
 
     # Step C: cross-sectional percentile ranks
     all_changes = sorted([d["change"] for d in raw_data.values()])
@@ -445,7 +453,7 @@ def run_egx_sector_scanner(
         reverse=True,
     ):
         agg = sector_agg[sector_key]
-        meta = EGX_SECTOR_META.get(sector_key, {})
+        meta = BIST_SECTOR_META.get(sector_key, {})
         heatmap.append(
             {
                 "sector": sector_key,
@@ -469,9 +477,9 @@ def run_egx_sector_scanner(
             }
         )
 
-    for sector_key in EGX_SECTORS:
+    for sector_key in BIST_SECTORS:
         if sector_key not in valid_sectors:
-            meta = EGX_SECTOR_META.get(sector_key, {})
+            meta = BIST_SECTOR_META.get(sector_key, {})
             heatmap.append(
                 {
                     "sector": sector_key,
@@ -492,7 +500,7 @@ def run_egx_sector_scanner(
     weighted_change = weighted_rsi = weighted_momentum = total_weight = 0.0
     for sector_key in valid_sectors:
         agg = sector_agg[sector_key]
-        weight = EGX_SECTOR_META.get(sector_key, {}).get("market_cap_weight", 0)
+        weight = BIST_SECTOR_META.get(sector_key, {}).get("market_cap_weight", 0)
         weighted_change += agg["avg_change"] * weight
         weighted_rsi += agg["avg_rsi"] * weight
         weighted_momentum += agg.get("momentum_score", 0) * weight
@@ -559,7 +567,7 @@ def run_egx_sector_scanner(
         sector_top_picks[sector_key] = picks
 
     return {
-        "exchange": "EGX",
+        "exchange": "BIST",
         "timeframe": timeframe,
         "total_sectors": len(heatmap),
         "total_stocks_scanned": len(raw_data),
@@ -578,42 +586,46 @@ def run_egx_sector_scanner(
 
 # ── Index Analysis ─────────────────────────────────────────────────────────────
 
-def analyze_egx_index(index: str = "EGX30", timeframe: str = "1D", limit: int = 30) -> dict:
+def analyze_bist_index(index: str = "BIST30", timeframe: str = "1D", limit: int = 30) -> dict:
     """
-    Analyze an EGX index showing constituent performance with full indicators.
+    Analyze a BIST index showing constituent performance with full indicators.
 
     Args:
-        index:     Index name (EGX30, EGX70, EGX100, SHARIAH33, EGX35LV, TAMAYUZ).
+        index:     Index name (BIST30, BIST50, BIST100).
         timeframe: TradingView interval (default '1D').
         limit:     Maximum number of stocks to show in detail.
 
     Returns:
         Index statistics, sector breakdown, top gainers/losers, and all_stocks list.
     """
-    from tradingview_mcp.core.data.egx_indices import EGX_INDICES, is_egx30_stock
-    from tradingview_mcp.core.data.egx_sectors import get_sector
+    from tradingview_mcp.core.data.bist_indices import BIST_INDICES, is_bist30_stock
+    from tradingview_mcp.core.data.bist_sectors import get_sector
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
     index_key = index.strip().upper()
-    if index_key not in EGX_INDICES:
+    if index_key not in BIST_INDICES:
         return {
             "error": f"Unknown index: {index}",
-            "available_indices": list(EGX_INDICES.keys()),
-            "usage": "Use EGX30, EGX70, or EGX100",
+            "available_indices": list(BIST_INDICES.keys()),
+            "usage": "Use BIST30, BIST50, or BIST100",
         }
 
-    index_info = EGX_INDICES[index_key]
+    index_info = BIST_INDICES[index_key]
     symbols = index_info["get_symbols"]()
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+    constituent_source = "dynamic (TradingView screener)" if len(symbols) != index_info["constituents_count"] else "static baseline"
 
     all_stocks: List[dict] = []
     batch_size = 200
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = get_multiple_analysis(
+                screener=_BIST_SCREENER_MARKET,
+                interval=timeframe,
+                symbols=batch,
+            )
         except Exception:
             continue
 
@@ -630,7 +642,7 @@ def analyze_egx_index(index: str = "EGX30", timeframe: str = "1D", limit: int = 
                     {
                         "symbol": sym,
                         "sector": get_sector(sym),
-                        "is_egx30": is_egx30_stock(sym),
+                        "is_bist30": is_bist30_stock(sym),
                         "price": metrics.get("price", 0),
                         "changePercent": metrics.get("change", 0),
                         "volume": ind.get("volume", 0),
@@ -688,9 +700,11 @@ def analyze_egx_index(index: str = "EGX30", timeframe: str = "1D", limit: int = 
         "index": index_key,
         "index_name": index_info["name"],
         "description": index_info["description"],
+        "tv_code": index_info.get("tv_code"),
+        "constituent_source": constituent_source,
         "timeframe": timeframe,
         "index_stats": {
-            "total_constituents": index_info["constituents_count"],
+            "total_constituents": len(symbols),
             "analyzed": len(all_stocks),
             "avg_change": round(avg_change, 2),
             "advancing": advancing,
@@ -708,52 +722,55 @@ def analyze_egx_index(index: str = "EGX30", timeframe: str = "1D", limit: int = 
 
 # ── Stock Screener ─────────────────────────────────────────────────────────────
 
-def screen_egx_stocks(
+def screen_bist_stocks(
     timeframe: str = "1D",
     min_score: int = 55,
     index_filter: str = "",
     limit: int = 20,
 ) -> dict:
     """
-    Production stock ranking engine for EGX — finds strong stocks with setups.
+    Production stock ranking engine for BIST — finds strong stocks with setups.
 
     Args:
         timeframe:    TradingView interval (default '1D').
         min_score:    Minimum stock score to include (0–100).
-        index_filter: Filter by index name (empty = all EGX).
+        index_filter: Filter by index name (empty = all BIST).
         limit:        Maximum results.
 
     Returns:
         Qualified trades, watchlist, grade distribution, and execution rules.
     """
-    from tradingview_mcp.core.data.egx_sectors import get_sector, get_currency
+    from tradingview_mcp.core.data.bist_sectors import get_sector, get_currency
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
     if index_filter:
-        from tradingview_mcp.core.data.egx_indices import EGX_INDICES
+        from tradingview_mcp.core.data.bist_indices import BIST_INDICES
         idx_key = index_filter.strip().upper()
-        if idx_key in EGX_INDICES:
-            symbols = EGX_INDICES[idx_key]["get_symbols"]()
+        if idx_key in BIST_INDICES:
+            symbols = BIST_INDICES[idx_key]["get_symbols"]()
             source_label = idx_key
         else:
-            return {"error": f"Unknown index: {index_filter}", "available": list(EGX_INDICES.keys())}
+            return {"error": f"Unknown index: {index_filter}", "available": list(BIST_INDICES.keys())}
     else:
-        symbols = load_symbols("egx")
-        source_label = "All EGX"
+        symbols = load_symbols("bist")
+        source_label = "All BIST"
 
     if not symbols:
-        return {"error": "No EGX symbols found."}
+        return {"error": "No BIST symbols found."}
 
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
     raw_results: List[tuple] = []
     batch_size = 200
 
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
         try:
-            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+            analysis = get_multiple_analysis(
+                screener=_BIST_SCREENER_MARKET,
+                interval=timeframe,
+                symbols=batch,
+            )
         except Exception:
             continue
 
@@ -771,7 +788,7 @@ def screen_egx_stocks(
                 continue
 
     if not raw_results:
-        return {"error": "No data returned for EGX stocks", "timeframe": timeframe}
+        return {"error": "No data returned for BIST stocks", "timeframe": timeframe}
 
     changes = sorted([r[2] for r in raw_results])
     n = len(changes)
@@ -868,27 +885,30 @@ def screen_egx_stocks(
 
 # ── Trade Plan ─────────────────────────────────────────────────────────────────
 
-def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+def generate_bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
     """
-    Generate a full trade plan for a specific EGX stock.
+    Generate a full trade plan for a specific BIST stock.
 
     Args:
-        symbol:    EGX stock symbol (e.g. 'COMI'). Will be prefixed with EGX:.
+        symbol:    BIST stock symbol (e.g. 'THYAO'). Will be prefixed with BIST:.
         timeframe: TradingView interval (default '1D').
 
     Returns:
         Complete plan: stock score, setup, stop-loss, targets, quality, and S/R.
     """
-    from tradingview_mcp.core.data.egx_sectors import get_sector, get_currency
+    from tradingview_mcp.core.data.bist_sectors import get_sector, get_currency
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
-    full_symbol = symbol.upper() if ":" in symbol else f"EGX:{symbol.upper()}"
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+    full_symbol = symbol.upper() if ":" in symbol else f"BIST:{symbol.upper()}"
 
     try:
-        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+        analysis = get_multiple_analysis(
+            screener=_BIST_SCREENER_MARKET,
+            interval=timeframe,
+            symbols=[full_symbol],
+        )
     except Exception as exc:
         return {"error": f"Analysis failed: {exc}"}
 
@@ -970,23 +990,23 @@ def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
 
 # ── Fibonacci Retracement ──────────────────────────────────────────────────────
 
-def analyze_egx_fibonacci(
+def analyze_bist_fibonacci(
     symbol: str,
     lookback: str = "52W",
     timeframe: str = "1D",
 ) -> dict:
     """
-    Fibonacci retracement analysis for an EGX stock.
+    Fibonacci retracement analysis for a BIST stock.
 
     Args:
-        symbol:    EGX stock symbol (e.g. 'COMI').
+        symbol:    BIST stock symbol (e.g. 'THYAO').
         lookback:  Period for swing high/low — '1M', '3M', '6M', '52W', 'ALL'.
         timeframe: TradingView interval (default '1D').
 
     Returns:
         Fibonacci retracement & extension levels, price position, and context.
     """
-    from tradingview_mcp.core.data.egx_sectors import get_sector, get_currency
+    from tradingview_mcp.core.data.bist_sectors import get_sector
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
@@ -995,8 +1015,7 @@ def analyze_egx_fibonacci(
     if lookback not in valid_lookbacks:
         return {"error": f"Invalid lookback: {lookback}", "valid": sorted(valid_lookbacks)}
 
-    full_symbol = symbol.upper() if ":" in symbol else f"EGX:{symbol.upper()}"
-    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+    full_symbol = symbol.upper() if ":" in symbol else f"BIST:{symbol.upper()}"
 
     LOOKBACK_COLUMNS = {
         "1M": ("High.1M", "Low.1M"),
@@ -1015,7 +1034,7 @@ def analyze_egx_fibonacci(
             high_col, low_col = LOOKBACK_COLUMNS[lookback]
             q = (
                 Query()
-                .set_markets("egypt")
+                .set_markets("turkey")
                 .select("close", high_col, low_col)
                 .set_tickers([full_symbol])
             )
@@ -1032,7 +1051,11 @@ def analyze_egx_fibonacci(
             pass
 
     try:
-        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+        analysis = get_multiple_analysis(
+            screener=_BIST_SCREENER_MARKET,
+            interval=timeframe,
+            symbols=[full_symbol],
+        )
     except Exception as exc:
         return {"error": f"Analysis failed: {exc}"}
 

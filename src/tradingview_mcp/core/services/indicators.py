@@ -72,6 +72,28 @@ def _safe_round(value, decimals: int = 4):
         return None
 
 
+def _get_atr(indicators: Dict) -> Tuple[Optional[float], Optional[str]]:
+    """Resolve ATR with a fallback.
+
+    TradingView's scanner endpoint does not expose ATR for most markets,
+    so fall back to the current candle's true range (high - low) when missing.
+    A 1-day TR is noisier than a 14-day ATR but is directionally comparable
+    in magnitude and lets downstream stop/volatility logic work.
+
+    Returns (value, source) where source is "tradingview", "high_low_1d", or None.
+    """
+    atr = indicators.get("ATR")
+    if atr is not None:
+        return atr, "tradingview"
+    high = indicators.get("high")
+    low = indicators.get("low")
+    if high is not None and low is not None and high >= low:
+        tr = high - low
+        if tr > 0:
+            return tr, "high_low_1d"
+    return None, None
+
+
 def extract_extended_indicators(indicators: Dict) -> Dict:
     """Extract extended technical indicators from TradingView data.
 
@@ -200,15 +222,25 @@ def extract_extended_indicators(indicators: Dict) -> Dict:
     ema_data["signals"] = ema_signals
 
     # --- ATR (Average True Range) ---
-    atr_value = indicators.get("ATR")
+    atr_value, atr_source = _get_atr(indicators)
     atr_pct = None
     if atr_value is not None and close and close > 0:
         atr_pct = (atr_value / close) * 100
 
+    if atr_pct is None:
+        atr_volatility = "Unknown"
+    elif atr_pct > 3:
+        atr_volatility = "High"
+    elif atr_pct > 1.5:
+        atr_volatility = "Medium"
+    else:
+        atr_volatility = "Low"
+
     atr = {
         "value": _safe_round(atr_value, 4),
         "percent_of_price": _safe_round(atr_pct, 2),
-        "volatility": "High" if atr_pct and atr_pct > 3 else "Medium" if atr_pct and atr_pct > 1.5 else "Low",
+        "volatility": atr_volatility,
+        "source": atr_source,
     }
 
     # --- MACD ---
@@ -971,7 +1003,7 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
     # ── C. Risk-Adjusted Technical Quality — 15 pts ───────────────────────
 
     # C7. Volatility Control (ATR%) — 10 pts
-    atr_val = indicators.get("ATR")
+    atr_val, _ = _get_atr(indicators)
     atr_pct = (atr_val / close) * 100 if atr_val and close > 0 else None
     vol_ctrl_pts = 0
     if atr_pct is not None:
@@ -1216,7 +1248,7 @@ def compute_trade_setup(indicators: Dict) -> Optional[Dict]:
     close = indicators.get("close")
     high = indicators.get("high")
     low = indicators.get("low")
-    atr = indicators.get("ATR")
+    atr, _ = _get_atr(indicators)
     ema20 = indicators.get("EMA20")
     ema50 = indicators.get("EMA50")
     ema200 = indicators.get("EMA200")

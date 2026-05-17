@@ -324,6 +324,32 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 
 ---
 
+### 🇹🇷 BIST (Borsa Istanbul) — Türk Borsası *(New in v0.8.0)*
+
+Tam Türk borsası desteği — EGX paritesinde, BIST30/50/100 endeksleri için hybrid (statik + canlı TradingView screener) constituent fetch.
+
+| Tool | Description |
+|------|-------------|
+| `bist_market_overview` | Top gainers, losers, most active stocks + market breadth |
+| `bist_index_analysis` | BIST30 / BIST50 / BIST100 endeks performansı, sektör dağılımı, en çok yükselenler/düşenler |
+| `bist_sector_scan` | Belirli bir sektörü tara (banking, holding, automotive, defense_aerospace, retail_and_food, reit, telecom...) |
+| `bist_sector_scanner` | Sektör rotasyon tarayıcı — sıcak/soğuk sektörler, top stock picks, weighted market view |
+| `bist_stock_screener` | 100 puanlık stock skorlama + trade setup'lar (entry/stop/targets) |
+| `bist_trade_plan` | Tek hisse için tam trade planı (THYAO, GARAN, ASELS vb.) |
+| `bist_fibonacci_retracement` | Fibonacci retracement & extension seviyeleri |
+
+**20 sektör:** banking, holding, industrials, petrochemicals, iron_steel_metals, automotive, energy_and_utilities, defense_aerospace, telecom, retail_and_food, reit, transportation, cement_glass, technology, mining, insurance_and_finserv, chemicals_fertilizers, construction, sports_and_media, textiles_apparel.
+
+> **Hybrid constituent fetch:** Endeks bileşenleri önce TradingView screener'dan canlı çekilir (`BIST:XU030/XU050/XU100`); başarısız olursa statik baseline'a düşer. Borsa İstanbul üç ayda bir endeks revizyonu yaptığı için bu yaklaşım her zaman güncel kalır.
+
+```
+Example: "BIST 30 endeksini analiz et"
+→ [bist_index_analysis] → 30 hisse | Avg +1.2% | 20 advancing | Sentiment: Bullish
+→ Sector breakdown: banking +2.1%, defense +3.4%, retail -0.8%
+```
+
+---
+
 ### 🌍 Multi-Exchange Support
 
 | Exchange | Tools |
@@ -332,7 +358,7 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 | **KuCoin / Bybit+** | Crypto screener |
 | **NASDAQ / NYSE** | US stocks (AAPL, TSLA, NVDA...) |
 | **EGX (Egypt)** | `egx_market_overview`, `egx_stock_screener`, `egx_trade_plan`, `egx_fibonacci_retracement` |
-| **Turkish (BIST)** | Via TradingView screener |
+| **BIST (Türkiye)** | `bist_market_overview`, `bist_index_analysis` (BIST30/50/100), `bist_sector_scan`, `bist_sector_scanner`, `bist_stock_screener`, `bist_trade_plan`, `bist_fibonacci_retracement` |
 
 ---
 
