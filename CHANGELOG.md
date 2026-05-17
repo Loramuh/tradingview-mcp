@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-05-17
+
+### Added
+- **BIST (Borsa Istanbul) Full Support** — EGX-parity tool suite for the Turkish stock market:
+  - `bist_market_overview` — top gainers, losers, most active, market breadth
+  - `bist_index_analysis` — BIST30 / BIST50 / BIST100 endeks bazlı performans, sektör dağılımı, breadth/sentiment
+  - `bist_sector_scan` — tek bir sektörü tara (banking, holding, automotive, defense_aerospace, reit, telecom, vb.)
+  - `bist_sector_scanner` — sektör rotasyon tarayıcı, weighted market view, hot/cold heatmap, top stock picks
+  - `bist_stock_screener` — 100 puanlık stock skorlama motoru + trade setup'lar (entry/stop/targets) + index filter
+  - `bist_trade_plan` — tek hisse için tam trade planı (skor, setup, R:R, trade quality, recommendation)
+  - `bist_fibonacci_retracement` — Fibonacci retracement & extension seviyeleri (1M/3M/6M/52W/ALL lookback)
+- **Hybrid endeks constituent fetch**: Önce TradingView screener'dan `BIST:XU030/XU050/XU100` için canlı çekim, başarısız olursa statik baseline'a düşer. Borsa İstanbul'un üç aylık endeks revizyonlarına otomatik adapte olur.
+- **BIST sector classification**: 20 sektör (banking, holding, industrials, petrochemicals, iron_steel_metals, automotive, energy_and_utilities, defense_aerospace, telecom, retail_and_food, reit, transportation, cement_glass, technology, mining, insurance_and_finserv, chemicals_fertilizers, construction, sports_and_media, textiles_apparel) + her sektör için market_cap_weight metadata.
+- **Yeni modüller**:
+  - `core/data/bist_indices.py` — BIST30/50/100 constituent listeleri + dynamic screener fetcher
+  - `core/data/bist_sectors.py` — sektör eşlemesi + meta + display names
+  - `core/services/bist_service.py` — tüm BIST iş mantığı
+
+### Changed
+- README'ye BIST (Türkiye) bölümü ve multi-exchange tablosuna BIST tool listesi eklendi.
+- MCP server description'ı BIST tool'larını da listeleyecek şekilde güncellendi.
+
+---
+
 ## [0.7.1] - 2026-04-14
 
 ### Added
