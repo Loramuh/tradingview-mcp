@@ -229,9 +229,9 @@ def extract_extended_indicators(indicators: Dict) -> Dict:
 
     if atr_pct is None:
         atr_volatility = "Unknown"
-    elif atr_pct > 3:
+    elif atr_pct > 8:
         atr_volatility = "High"
-    elif atr_pct > 1.5:
+    elif atr_pct > 5:
         atr_volatility = "Medium"
     else:
         atr_volatility = "Low"
@@ -1003,20 +1003,22 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
     # ── C. Risk-Adjusted Technical Quality — 15 pts ───────────────────────
 
     # C7. Volatility Control (ATR%) — 10 pts
+    # Thresholds calibrated against 1-day high-low TR distribution on BIST100
+    # (median 3.5%, p75 5.0%, p90 8.2%); see _get_atr fallback in this module.
     atr_val, _ = _get_atr(indicators)
     atr_pct = (atr_val / close) * 100 if atr_val and close > 0 else None
     vol_ctrl_pts = 0
     if atr_pct is not None:
-        if 1.0 <= atr_pct <= 3.0:
+        if 2.0 <= atr_pct <= 5.0:
             vol_ctrl_pts = 10
             signals.append(f"ATR% {atr_pct:.1f}% (healthy volatility)")
-        elif 3.0 < atr_pct <= 4.5:
+        elif 5.0 < atr_pct <= 7.0:
             vol_ctrl_pts = 7
-        elif 4.5 < atr_pct <= 6.0:
+        elif 7.0 < atr_pct <= 10.0:
             vol_ctrl_pts = 4
         else:
             vol_ctrl_pts = 0
-            if atr_pct > 6.0:
+            if atr_pct > 10.0:
                 signals.append(f"ATR% {atr_pct:.1f}% (very volatile)")
     breakdown["volatility_control"] = vol_ctrl_pts
     total += vol_ctrl_pts
