@@ -653,6 +653,7 @@ def analyze_bist_index(index: str = "BIST30", timeframe: str = "1D", limit: int 
                         "sma200": extended["sma"]["sma200"],
                         "atr": extended["atr"]["value"],
                         "atr_volatility": extended["atr"]["volatility"],
+                        "atr_source": extended["atr"]["source"],
                         "macd_crossover": extended["macd"]["crossover"],
                         "volume_signal": extended["volume"]["signal"],
                         "bbw": metrics.get("bbw", 0),
