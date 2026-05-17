@@ -154,6 +154,13 @@ def _scan_with_retry(q, cookies=None):
     raise last_exc
 
 
+# tradingview_ta's Interval enum uses lowercase '1d' for daily but uppercase
+# '1W'/'1M' for week/month. Our codebase has standardised on uppercase '1D',
+# so the library treats it as invalid and silently defaults to 1 day with a
+# UserWarning. Normalise at the boundary so the library sees what it expects.
+_TA_INTERVAL_FIX = {"1D": "1d"}
+
+
 def resilient_get_multiple_analysis(screener, interval, symbols):
     """Drop-in replacement for tradingview_ta.get_multiple_analysis with the
     same resilience layer used by the screener calls (retry + 60s TTL cache).
@@ -165,6 +172,7 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     except Exception as e:
         raise ImportError("tradingview_ta is not installed") from e
 
+    interval = _TA_INTERVAL_FIX.get(interval, interval)
     sym_key = tuple(sorted(symbols)) if symbols else ()
     cache_key = ('ta_multi_v1', screener, interval, sym_key)
     cached = _cache_get(cache_key)
