@@ -613,8 +613,7 @@ def analyze_bist_index(index: str = "BIST30", timeframe: str = "1D", limit: int 
         }
 
     index_info = BIST_INDICES[index_key]
-    symbols = index_info["get_symbols"]()
-    constituent_source = "dynamic (TradingView screener)" if len(symbols) != index_info["constituents_count"] else "static baseline"
+    symbols, constituent_source = index_info["get_symbols_with_source"]()
 
     all_stocks: List[dict] = []
     batch_size = 200
