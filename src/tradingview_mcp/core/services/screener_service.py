@@ -446,11 +446,19 @@ def analyze_coin(
         compute_trade_setup,
         compute_trade_quality,
     )
-    from tradingview_mcp.core.utils.validators import is_stock_exchange, normalize_tradingview_symbol
+    from tradingview_mcp.core.utils.validators import (
+        is_stock_exchange,
+        normalize_tradingview_symbol,
+        sanitize_exchange,
+    )
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
+    # Defensive normalize: MCP entry already does this, but a direct call
+    # with uppercase 'BIST' would otherwise land on the crypto screener
+    # (EXCHANGE_SCREENER keys are lowercase) and return "No data".
+    exchange = sanitize_exchange(exchange)
     full_symbol = normalize_tradingview_symbol(symbol, exchange)
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
 
