@@ -758,9 +758,20 @@ def run_multi_timeframe_analysis(
         extract_extended_indicators,
         analyze_timeframe_context,
     )
+    from tradingview_mcp.core.utils.validators import (
+        sanitize_exchange,
+        normalize_tradingview_symbol,
+    )
 
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
+
+    # Defensive normalize: MCP entry point already does this, but direct
+    # importers (e.g. uppercase 'BIST' / unprefixed 'EREGL') would otherwise
+    # silently fall through to the crypto screener and return "No data" for
+    # every timeframe.
+    exchange = sanitize_exchange(exchange)
+    symbol = normalize_tradingview_symbol(symbol, exchange)
 
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
     timeframes = ["1W", "1D", "4h", "1h", "15m"]
