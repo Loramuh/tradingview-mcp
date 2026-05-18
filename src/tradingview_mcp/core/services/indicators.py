@@ -72,6 +72,31 @@ def _safe_round(value, decimals: int = 4):
         return None
 
 
+def _get_volume_avg(indicators: Dict) -> Tuple[Optional[float], Optional[str]]:
+    """Resolve average daily volume with fallbacks.
+
+    TradingView's `tradingview_ta` scanner omits `volume.SMA20` for most
+    stock markets (BIST, EGX confirmed), so look up several alternative
+    keys before giving up:
+
+    1. `volume.SMA20`   — original TA library field (rarely populated for stocks)
+    2. `average_volume` — TradingView screener field (populated when injected
+                          via the side-channel screener fetch)
+
+    Returns (value, source). Source is "tradingview_sma20",
+    "tradingview_average", or None when no data is available.
+    Callers must handle the None case (typically by giving baseline credit
+    rather than zero, to avoid penalising stocks for missing data).
+    """
+    v = indicators.get("volume.SMA20")
+    if v is not None and v > 0:
+        return float(v), "tradingview_sma20"
+    v = indicators.get("average_volume")
+    if v is not None and v > 0:
+        return float(v), "tradingview_average"
+    return None, None
+
+
 def _get_atr(indicators: Dict) -> Tuple[Optional[float], Optional[str]]:
     """Resolve ATR with a fallback.
 
@@ -964,21 +989,33 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
     # ── B. Confirmation — 20 pts ──────────────────────────────────────────
 
     # B5. Volume Confirmation — 10 pts
+    # Prefer TradingView's `relative_volume` (volume / its own average) when
+    # available — that's exactly the ratio we score on. Otherwise compute
+    # from volume + _get_volume_avg fallback chain. When no average is
+    # available at all (TradingView omits `volume.SMA20` for most stock
+    # markets), give a neutral baseline of 4 pts rather than zero — we
+    # don't know, but we shouldn't penalise every BIST/EGX stock for it.
     volume = indicators.get("volume")
-    vol_sma20 = indicators.get("volume.SMA20")
+    vol_avg, vol_avg_src = _get_volume_avg(indicators)
+    rel_vol = indicators.get("relative_volume")
+    if rel_vol is None and volume and vol_avg:
+        rel_vol = volume / vol_avg
+    vol_ratio = rel_vol
+
     vol_pts = 0
-    vol_ratio = None
-    if volume and vol_sma20 and vol_sma20 > 0:
-        vol_ratio = volume / vol_sma20
-        if vol_ratio >= 1.5:
+    if rel_vol is not None:
+        if rel_vol >= 1.5:
             vol_pts = 10
-            signals.append(f"Volume {vol_ratio:.1f}x above avg (strong participation)")
-        elif vol_ratio >= 1.2:
+            signals.append(f"Volume {rel_vol:.1f}x above avg (strong participation)")
+        elif rel_vol >= 1.2:
             vol_pts = 7
-        elif vol_ratio >= 1.0:
+        elif rel_vol >= 1.0:
             vol_pts = 4
         else:
             vol_pts = 0
+    elif volume:
+        vol_pts = 4  # data unavailable — neutral baseline
+        signals.append("Volume avg unavailable — using neutral baseline")
     breakdown["volume_confirmation"] = vol_pts
     total += vol_pts
 
@@ -1110,7 +1147,9 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
         penalties.append("Very low relative volume (-10)")
 
     # ── Liquidity Assessment ──────────────────────────────────────────────
-    avg_vol = vol_sma20 if vol_sma20 and vol_sma20 > 0 else (volume if volume else None)
+    # Prefer real average from `_get_volume_avg` (volume.SMA20 or
+    # average_volume), fall back to current volume if neither is available.
+    avg_vol = vol_avg if vol_avg else (volume if volume else None)
     avg_value_20d = (avg_vol * close) if avg_vol and close else None
     liquidity_ok = True       # passes hard gate for Strong/Elite
     liquidity_cap = None      # hard grade cap (None = no cap)
@@ -1399,7 +1438,10 @@ def compute_trade_quality(indicators: Dict, stock_score: int, trade_setup: Dict)
     ema200 = indicators.get("EMA200")
     adx = indicators.get("ADX")
     volume = indicators.get("volume")
-    vol_sma20 = indicators.get("volume.SMA20")
+    vol_avg, _ = _get_volume_avg(indicators)
+    rel_vol = indicators.get("relative_volume")
+    if rel_vol is None and volume and vol_avg:
+        rel_vol = volume / vol_avg
 
     total = 0
     breakdown = {}
@@ -1449,18 +1491,23 @@ def compute_trade_quality(indicators: Dict, stock_score: int, trade_setup: Dict)
     total += rr_pts
 
     # ── Volume Confirmation — 20 pts ──────────────────────────────────────
+    # Same data-aware logic as compute_stock_score B5: neutral baseline (8
+    # pts ≈ "average") when no avg-volume data is available, instead of
+    # zero-penalising every BIST/EGX stock.
     vol_pts = 0
-    if volume and vol_sma20 and vol_sma20 > 0:
-        ratio = volume / vol_sma20
-        if ratio >= 1.5:
+    if rel_vol is not None:
+        if rel_vol >= 1.5:
             vol_pts = 20
-            notes.append(f"Strong volume participation ({ratio:.1f}x)")
-        elif ratio >= 1.2:
+            notes.append(f"Strong volume participation ({rel_vol:.1f}x)")
+        elif rel_vol >= 1.2:
             vol_pts = 14
-        elif ratio >= 1.0:
+        elif rel_vol >= 1.0:
             vol_pts = 8
         else:
             vol_pts = 0
+    elif volume:
+        vol_pts = 8
+        notes.append("Volume avg unavailable — using neutral baseline")
     breakdown["volume_confirmation"] = vol_pts
     total += vol_pts
 
@@ -1484,14 +1531,17 @@ def compute_trade_quality(indicators: Dict, stock_score: int, trade_setup: Dict)
     total += stop_pts
 
     # ── Liquidity — 10 pts ────────────────────────────────────────────────
+    # Prefer real average; fall back to today's volume when no avg
+    # available (still informative — a 100M-volume day clearly clears the
+    # 500k threshold, even if we don't have the 20-day mean).
+    liq_proxy = vol_avg if vol_avg else volume
     liq_pts = 0
-    if volume and vol_sma20:
-        # Use average volume as liquidity proxy
-        if vol_sma20 >= 500000:
+    if liq_proxy:
+        if liq_proxy >= 500000:
             liq_pts = 10
-        elif vol_sma20 >= 100000:
+        elif liq_proxy >= 100000:
             liq_pts = 7
-        elif vol_sma20 >= 50000:
+        elif liq_proxy >= 50000:
             liq_pts = 4
         else:
             liq_pts = 0

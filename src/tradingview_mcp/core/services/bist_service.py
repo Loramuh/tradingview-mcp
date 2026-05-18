@@ -27,8 +27,22 @@ from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER
 try:
     import tradingview_ta  # noqa: F401  presence check
     from tradingview_mcp.core.services.screener_provider import (
-        resilient_get_multiple_analysis as get_multiple_analysis,
+        resilient_get_multiple_analysis as _gma_raw,
+        enrich_indicators_with_volume_metrics,
     )
+
+    def get_multiple_analysis(screener, interval, symbols):
+        """BIST-aware wrapper: fetch indicators, then enrich each result
+        with `average_volume` / `relative_volume` from the TV screener so
+        volume-confirmation and liquidity scoring have real data to use.
+        See screener_provider.enrich_indicators_with_volume_metrics."""
+        result = _gma_raw(screener=screener, interval=interval, symbols=symbols)
+        try:
+            enrich_indicators_with_volume_metrics(result, screener)
+        except Exception:
+            pass
+        return result
+
     _TA_AVAILABLE = True
 except ImportError:
     _TA_AVAILABLE = False
