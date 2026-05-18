@@ -436,15 +436,20 @@ def egx_stock_screener(
 
 
 @mcp.tool()
-def egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+def egx_trade_plan(symbol: str, timeframe: str = "1D", universe: str = "EGX100") -> dict:
     """Generate a full trade plan for a specific EGX stock.
 
     Args:
         symbol: EGX stock symbol (e.g., "COMI", "TMGH", "FWRY")
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+        universe: Ranking universe for the relative performance score
+                  component. One of "EGX30", "EGX70", "EGX100", "SHARIAH33",
+                  "EGX35LV", "TAMAYUZ", "ALL", or "" to skip rank
+                  (standalone score, max 85). Default "EGX100" matches
+                  `egx_stock_screener(index_filter="EGX100")`.
     """
     timeframe = sanitize_timeframe(timeframe, "1D")
-    return generate_egx_trade_plan(symbol, timeframe)
+    return generate_egx_trade_plan(symbol, timeframe, universe)
 
 
 @mcp.tool()
@@ -555,15 +560,19 @@ def bist_stock_screener(
 
 
 @mcp.tool()
-def bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+def bist_trade_plan(symbol: str, timeframe: str = "1D", universe: str = "BIST100") -> dict:
     """Generate a full trade plan for a specific BIST stock.
 
     Args:
         symbol: BIST stock symbol (e.g., "THYAO", "GARAN", "ASELS")
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D)
+        universe: Ranking universe for the relative performance score
+                  component. One of "BIST30", "BIST50", "BIST100", "ALL",
+                  or "" to skip rank (standalone score, max 85). Default
+                  "BIST100" matches `bist_stock_screener(index_filter="BIST100")`.
     """
     timeframe = sanitize_timeframe(timeframe, "1D")
-    return generate_bist_trade_plan(symbol, timeframe)
+    return generate_bist_trade_plan(symbol, timeframe, universe)
 
 
 @mcp.tool()
