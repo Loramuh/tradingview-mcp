@@ -589,6 +589,67 @@ def bist_fibonacci_retracement(symbol: str, lookback: str = "52W", timeframe: st
     return analyze_bist_fibonacci(symbol, lookback, timeframe)
 
 
+# ── BIST news & disclosures ────────────────────────────────────────────────────
+
+@mcp.tool()
+def bist_news_links(symbol: str) -> dict:
+    """Return news & disclosure URLs for a BIST stock — fast, no scraping.
+
+    Useful when the caller wants to surface clickable links or hand the URLs
+    to a WebFetch-capable tool for further analysis. KAP is currently
+    URL-only because its frontend is JavaScript-rendered.
+
+    Args:
+        symbol: BIST stock symbol (e.g., "THYAO", "GARAN", "EREGL")
+    """
+    from tradingview_mcp.core.services.bist_news_service import get_news_links
+    return get_news_links(symbol)
+
+
+@mcp.tool()
+def bist_news(symbol: str, source: str = "all", limit: int = 10) -> dict:
+    """Fetch recent news items for a BIST stock from Turkish financial sources.
+
+    Sources currently supported: Bigpara (Hürriyet), Mynet Finans. KAP
+    disclosures are URL-only (JavaScript-rendered frontend).
+
+    Returns per-source item lists plus a merged 'items' list. Each item has
+    title, url, source, and (when available) published date. The calling
+    LLM (e.g. Claude Desktop) is expected to read titles + click through URLs
+    via WebFetch to evaluate.
+
+    Args:
+        symbol: BIST stock symbol (e.g., "THYAO", "EREGL", "ASELS")
+        source: "bigpara", "mynet", or "all" (default)
+        limit: Max items per source (default 10, max 30)
+    """
+    from tradingview_mcp.core.services.bist_news_service import fetch_bist_news
+    limit = max(1, min(30, limit))
+    return fetch_bist_news(symbol, source=source, limit_per_source=limit)
+
+
+@mcp.tool()
+def bist_news_digest(symbol: str, limit: int = 15) -> dict:
+    """Aggregated news digest for a BIST stock with rule-based sentiment + flags.
+
+    Pulls from Bigpara + Mynet, classifies each headline with Turkish keyword
+    heuristics (positive / negative / neutral), surfaces material KAP-category
+    hints (bilanço, temettü, olağandışı, etc.), and emits warning flags when
+    aggregate signals look concerning. KAP search URL provided for manual /
+    WebFetch follow-up.
+
+    The output is intentionally raw enough for an LLM in the calling layer to
+    add nuance. Rule-based sentiment is a signal, not a verdict.
+
+    Args:
+        symbol: BIST stock symbol (e.g., "THYAO", "EREGL")
+        limit: Max items in the digest (default 15, max 50)
+    """
+    from tradingview_mcp.core.services.bist_news_service import build_news_digest
+    limit = max(1, min(50, limit))
+    return build_news_digest(symbol, limit=limit)
+
+
 # ── Multi-timeframe analysis ───────────────────────────────────────────────────
 
 @mcp.tool()
