@@ -208,6 +208,68 @@ def resilient_get_multiple_analysis(screener, interval, symbols):
     raise last_exc
 
 
+def enrich_indicators_with_volume_metrics(analysis_dict, market: str) -> None:
+    """Augment `tradingview_ta` analysis results with average_volume and
+    relative_volume fetched from the TradingView screener.
+
+    The TA library omits `volume.SMA20` for most stock markets (BIST, EGX
+    confirmed), causing volume-confirmation and liquidity scoring to be
+    silently zeroed. This helper does one screener call to retrieve the
+    real averages, then mutates each `analysis[sym].indicators` dict so
+    downstream scorers (`_get_volume_avg`) pick them up transparently.
+
+    Failures are swallowed — callers continue with whatever volume data
+    they already have (the scoring fallback handles missing values).
+    """
+    if not analysis_dict:
+        return
+    try:
+        from tradingview_screener import Query
+    except Exception:
+        return
+
+    name_to_data: Dict[str, list] = {}
+    for sym, data in analysis_dict.items():
+        if data is None or getattr(data, 'indicators', None) is None:
+            continue
+        short = sym.split(':', 1)[-1]
+        name_to_data.setdefault(short, []).append(data)
+    if not name_to_data:
+        return
+
+    try:
+        q = (
+            Query()
+            .set_markets(market)
+            .select('name', 'average_volume', 'relative_volume')
+            .limit(1500)
+        )
+        _, df = q.get_scanner_data()
+    except Exception:
+        return
+    if df is None or df.empty:
+        return
+
+    for _, row in df.iterrows():
+        short = row.get('name')
+        if short not in name_to_data:
+            continue
+        avg = row.get('average_volume')
+        rel = row.get('relative_volume')
+        for data in name_to_data[short]:
+            ind = data.indicators
+            if avg is not None and 'average_volume' not in ind:
+                try:
+                    ind['average_volume'] = float(avg)
+                except (TypeError, ValueError):
+                    pass
+            if rel is not None and 'relative_volume' not in ind:
+                try:
+                    ind['relative_volume'] = float(rel)
+                except (TypeError, ValueError):
+                    pass
+
+
 def _tf_to_tv_resolution(tf: Optional[str]) -> Optional[str]:
     """Map our timeframe to TradingView resolution suffix used in columns.
     Returns None if no mapping (means: no suffix).
