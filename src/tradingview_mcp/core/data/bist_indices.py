@@ -15,135 +15,123 @@ from typing import Dict, List, Optional, Tuple
 
 
 # ── Static constituent baselines ───────────────────────────────────────────────
-# Snapshot of BIST30 (XU030). Update when Borsa Istanbul publishes a new
-# index revision — typically the first business day of January / April /
-# July / October.
+# Snapshot of BIST30 (XU030) as of 2026-05-18 — synced from TradingView's
+# live index membership. Borsa Istanbul revises index composition quarterly
+# (typically first business day of January / April / July / October), so
+# re-run the sync script after each revision. The dynamic fetcher in
+# `_fetch_index_constituents_dynamic` will normally supersede these lists;
+# they exist as the offline fallback.
 BIST30_CONSTITUENTS: List[str] = [
-    "AKBNK",   # Akbank
-    "ALARK",   # Alarko Holding
-    "ASELS",   # Aselsan
-    "ASTOR",   # Astor Enerji
-    "BIMAS",   # BIM Birlesik Magazalar
-    "DOAS",    # Dogus Otomotiv
-    "EKGYO",   # Emlak Konut GYO
-    "ENJSA",   # Enerjisa Enerji
-    "ENKAI",   # Enka Insaat
-    "EREGL",   # Eregli Demir Celik
-    "FROTO",   # Ford Otosan
-    "GARAN",   # Garanti BBVA
-    "GUBRF",   # Gubre Fabrikalari
-    "HEKTS",   # Hektas
-    "ISCTR",   # Is Bankasi (C)
-    "KCHOL",   # Koc Holding
-    "KOZAL",   # Koza Altin
-    "KRDMD",   # Kardemir (D)
-    "MGROS",   # Migros
-    "PETKM",   # Petkim
-    "PGSUS",   # Pegasus
-    "SAHOL",   # Sabanci Holding
-    "SASA",    # SASA Polyester
-    "SISE",    # Sise Cam
-    "TCELL",   # Turkcell
-    "THYAO",   # Turk Hava Yollari
-    "TOASO",   # Tofas Oto
-    "TUPRS",   # Tupras
-    "VAKBN",   # Vakifbank
-    "YKBNK",   # Yapi Kredi
+    "AEFES",  # Anadolu Efes Biracilik ve
+    "AKBNK",  # Akbank
+    "ASELS",  # Aselsan Elektronik Sanayi ve
+    "ASTOR",  # Astor Enerji
+    "BIMAS",  # BIM Birlesik Magazalar
+    "DSTKF",  # Destek Finans Faktoring
+    "EKGYO",  # Emlak Konut Gayrimenkul
+    "ENKAI",  # Enka Insaat ve Sanayi
+    "EREGL",  # Eregli Demir Ve Celik
+    "FROTO",  # Ford Otomotiv Sanayi
+    "GARAN",  # Turkiye Garanti Bankasi
+    "GUBRF",  # Gubre Fabrikalari
+    "ISCTR",  # Turkiye Is Bankasi
+    "KCHOL",  # Koc Holding
+    "KRDMD",  # Kardemir Karabuk Demir Celik
+    "MGROS",  # Migros Ticaret
+    "PETKM",  # Petkim Petrokimya Holding
+    "PGSUS",  # Pegasus Hava Tasimaciligi
+    "SAHOL",  # Haci Omer Sabanci Holding
+    "SASA",   # Sasa Polyester Sanayi
+    "SISE",   # Turkiye Sise ve Cam
+    "TAVHL",  # TAV Havalimanlari Holding
+    "TCELL",  # Turkcell Iletisim Hizmetleri
+    "THYAO",  # Turk Hava Yollari
+    "TOASO",  # Tofas Turk Otomobil Fabrikasi
+    "TRALT",  # Turk Altin Isletmeleri
+    "TTKOM",  # Turk Telekomunikasyon
+    "TUPRS",  # Turkiye Petrol Rafinerileri
+    "VAKBN",  # Turkiye Vakiflar Bankasi
+    "YKBNK",  # Yapi ve Kredi Bankasi
 ]
 
-# BIST50 additions (the next ~20 stocks beyond BIST30 — most liquid mid/large caps)
+# BIST50 additions (the 20 stocks beyond BIST30 — most liquid mid/large caps)
+# Snapshot as of 2026-05-18.
 _BIST50_EXTRA: List[str] = [
-    "AEFES",   # Anadolu Efes
-    "AGHOL",   # Anadolu Grubu Holding
-    "AKSEN",   # Aksa Enerji
-    "ARCLK",   # Arcelik
-    "BIENY",   # Bien Yapi
-    "CCOLA",   # Coca-Cola Icecek
-    "CIMSA",   # Cimsa
-    "CWENE",   # CW Enerji
-    "DOHOL",   # Dogan Holding
-    "ENERY",   # Enerya Enerji
-    "EUPWR",   # Europower
-    "HALKB",   # Halkbank
-    "KCAER",   # Kocaer Celik
-    "KONTR",   # Kontrolmatik
-    "KOZAA",   # Koza Anadolu
-    "ODAS",    # Odas Elektrik
-    "OYAKC",   # Oyak Cimento
-    "SMRTG",   # Smart Gunes Enerji
-    "TABGD",   # TAB Gida
-    "TAVHL",   # TAV Havalimanlari
-    "TKFEN",   # Tekfen Holding
-    "TTKOM",   # Turk Telekom
-    "TUKAS",   # Tukas
-    "ULKER",   # Ulker Biskuvi
+    "ALARK",  # Alarko Holding
+    "ARCLK",  # Arcelik
+    "BRSAN",  # Borusan Birlesik Boru Fabrikalari
+    "BTCIM",  # Baticim Bati Anadolu Cimento
+    "CANTE",  # Can2 Termik
+    "CCOLA",  # Coca-Cola Icecek
+    "CIMSA",  # Cimsa Cimento Sanayi ve
+    "DOAS",   # Dogus Otomotiv Servis ve
+    "HALKB",  # Turkiye Halk Bankasi
+    "HEKTS",  # Hektas Ticaret
+    "KONTR",  # Kontrolmatik Teknoloji Enerji
+    "KUYAS",  # Kuyas Yatirim
+    "MAVI",   # Mavi Giyim Sanayi ve Ticaret
+    "MIATK",  # MIA Teknoloji
+    "OYAKC",  # Oyak Cimento Fabrikalari
+    "PASEU",  # Pasifik Eurasia Lojistik dis
+    "TRMET",  # TR Anadolu Metal Madencilik
+    "TSKB",   # Turkiye Sinai Kalkinma Bankasi
+    "TURSG",  # Turkiye Sigorta
+    "ULKER",  # Ulker Biskuvi Sanayi
 ]
 
-# BIST100 additions (the remaining ~50 mid/small caps to reach 100)
+# BIST100 additions (the 50 stocks beyond BIST50 to reach 100)
+# Snapshot as of 2026-05-18.
 _BIST100_EXTRA: List[str] = [
-    "A1CAP",   # A1 Capital
-    "AHGAZ",   # Aksa Dogalgaz
-    "AKCNS",   # Akcansa
-    "AKFGY",   # Akfen GYO
-    "AKFYE",   # Akfen Yenilenebilir Enerji
-    "AKSA",    # Aksa
-    "ALBRK",   # Albaraka Turk
-    "ANSGR",   # Anadolu Sigorta
-    "ASUZU",   # Anadolu Isuzu
-    "AYDEM",   # Aydem Enerji
-    "AYGAZ",   # Aygaz
-    "BERA",    # Bera Holding
-    "BIOEN",   # Biotrend Cevre
-    "BRSAN",   # Borusan Mannesmann
-    "BRYAT",   # Borusan Yatirim
-    "BUCIM",   # Bursa Cimento
-    "CANTE",   # Can2 Termik
-    "CLEBI",   # Celebi Hava Servisi
-    "CVKMD",   # CVK Maden
-    "DEVA",    # Deva Holding
-    "ECILC",   # Eczacibasi Ilac
-    "EGEEN",   # Ege Endustri
-    "FENER",   # Fenerbahce Sportif
-    "GESAN",   # Girisim Elektrik
-    "GLYHO",   # Global Yatirim Holding
-    "GOLTS",   # Goltas Cimento
-    "GOZDE",   # Gozde Girisim Sermayesi
-    "GSRAY",   # Galatasaray Sportif
-    "IPEKE",   # Ipek Dogal Enerji
-    "IZMDC",   # Izmir Demir Celik
-    "KARSN",   # Karsan Otomotiv
-    "KMPUR",   # Kimpur
-    "KORDS",   # Kordsa
-    "KZBGY",   # Kiziltepe GYO
-    "LIDER",   # Lider Faktoring
-    "LOGO",    # Logo Yazilim
-    "MAVI",    # Mavi Giyim
-    "MIATK",   # Mia Teknoloji
-    "OBASE",   # Obase Bilgisayar
-    "OTKAR",   # Otokar
-    "PAPIL",   # Papilon Savunma
-    "PENTA",   # Penta Teknoloji
-    "PRKAB",   # Turk Prysmian Kablo
-    "QUAGR",   # QUA Granite
-    "REEDR",   # Reeder Teknoloji
-    "SDTTR",   # SDT Uzay Savunma
-    "SELEC",   # Selcuk Ecza Deposu
-    "SKBNK",   # Sekerbank
-    "SOKM",    # Sok Marketler
-    "TATGD",   # Tat Gida
-    "TKHL",    # Turkiye Kalkinma Holding
-    "TKNSA",   # Teknosa
-    "TMSN",    # Tumosan
-    "TRGYO",   # Torunlar GYO
-    "TSPOR",   # Trabzonspor
-    "TTRAK",   # Turk Traktor
-    "TUREX",   # Tureks Turizm
-    "TURSG",   # Turkiye Sigorta
-    "VESBE",   # Vestel Beyaz Esya
-    "VESTL",   # Vestel
-    "YATAS",   # Yatas
-    "YEOTK",   # Yeo Teknoloji
-    "ZOREN",   # Zorlu Enerji
+    "AGHOL",  # AG Anadolu Grubu Holding
+    "AKSA",   # Aksa Akrilik Kimya Sanayii
+    "AKSEN",  # Aksa Enerji Uretim
+    "ALTNY",  # Altinay Savunma Teknolojileri
+    "ANSGR",  # Anadolu Anonim Turk Sigorta
+    "BALSU",  # Balsu Gida Sanayi ve Ticaret
+    "BRYAT",  # Borusan Yatirim ve Pazarlama
+    "BSOKE",  # Batisoke Soke Cimento Sanayii
+    "CVKMD",  # CVK Maden Isletmeleri Sanayi
+    "CWENE",  # CW Enerji Muhendislik Ticaret
+    "DAPGM",  # DAP Gayrimenkul Gelistirme
+    "DOHOL",  # Dogan Sirketler Grubu Holding
+    "ECILC",  # EIS Eczacibasi Ilac, Sinai ve
+    "EFOR",   # Efor Yatirim Sanayi Ticaret
+    "ENERY",  # Enerya Enerji
+    "ENJSA",  # Enerjisa Enerji
+    "EUPWR",  # Europower Enerji ve Otomasyon
+    "EUREN",  # Europen Endustri Insaat
+    "FENER",  # Fenerbahce Futbol
+    "GENIL",  # Gen Ilac ve Saglik Urunleri
+    "GESAN",  # Girisim Elektrik Sanayi
+    "GLRMK",  # Gulermak Agir Sanayi Insaat
+    "GRSEL",  # Gur-Sel Turizm Tasimacilik Ve
+    "GRTHO",  # Grainturk Holding
+    "GSRAY",  # Galatasaray Sportif Sinai
+    "ISMEN",  # Is Yatirim Menkul Degerler
+    "IZENR",  # Izdemir Enerji Elektrik Uretim
+    "KLRHO",  # Kiler Holding
+    "KTLEV",  # Katilimevim Tasarruf Finansman
+    "MAGEN",  # Margun Enerji Uretim Sanayi
+    "MPARK",  # MLP Saglik Hizmetleri
+    "OBAMS",  # Oba Makarnacilik Sanayi Ve
+    "ODAS",   # Odas Elektrik Uretim Sanayi
+    "OTKAR",  # Otokar Otomotiv ve Savunma
+    "PAHOL",  # Pasifik Holding
+    "PATEK",  # Pasifik Teknoloji
+    "PSGYO",  # Pasifik Gayrimenkul Yatirim
+    "QUAGR",  # Qua Granite Hayal Yapi ve
+    "RALYH",  # Ral Yatirim Holding
+    "REEDR",  # Reeder Teknoloji Sanayi ve
+    "SARKY",  # Sarkuysan Elektrolitik Bakir
+    "SKBNK",  # Sekerbank
+    "SOKM",   # Sok Marketler Ticaret
+    "TABGD",  # TAB Gida Sanayi ve Ticaret
+    "TKFEN",  # Tekfen Holding
+    "TRENJ",  # TR Dogal Enerji Kaynaklari
+    "TUKAS",  # Tukas Gida Sanayi ve Ticaret
+    "TUREX",  # Tureks Turizm Tasimacilik
+    "VESTL",  # Vestel Elektronik Sanayi ve
+    "ZOREN",  # Zorlu Enerji Elektrik Uretim
 ]
 
 # Deduplicated full BIST50 and BIST100 lists
