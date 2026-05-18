@@ -882,13 +882,84 @@ def screen_egx_stocks(
 
 # ── Trade Plan ─────────────────────────────────────────────────────────────────
 
-def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+def _resolve_egx_universe(universe: str) -> Optional[List[str]]:
+    """Return the list of EGX symbols for a named universe, or None if unknown.
+
+    Accepts any key in EGX_INDICES ('EGX30', 'EGX70', 'EGX100', 'SHARIAH33',
+    'EGX35LV', 'TAMAYUZ') or 'ALL'. Empty string is treated as a signal to
+    skip rank scoring.
+    """
+    key = (universe or "").strip().upper()
+    if not key:
+        return None
+    if key == "ALL":
+        return load_symbols("egx") or None
+    from tradingview_mcp.core.data.egx_indices import EGX_INDICES
+    if key in EGX_INDICES:
+        syms = EGX_INDICES[key]["get_symbols"]()
+        return syms or None
+    return None
+
+
+def _compute_egx_universe_pct_rank(
+    target_change: float,
+    universe_symbols: List[str],
+    timeframe: str,
+) -> Optional[float]:
+    """Compute target stock's percentile rank (0.0-1.0) of day-change among
+    an EGX universe. Returns None if no universe data is available.
+
+    Mirrors the rank logic in `screen_egx_stocks` so a trade_plan call with
+    the same universe yields the same `change_pct_rank` (and therefore the
+    same stock_score) the screener would produce. Universe fetches go through
+    `get_multiple_analysis`, which has a 60s TTL cache.
+    """
+    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+    changes: List[float] = []
+    batch_size = 200
+    for i in range(0, len(universe_symbols), batch_size):
+        batch = universe_symbols[i : i + batch_size]
+        try:
+            analysis = get_multiple_analysis(
+                screener=screener,
+                interval=timeframe,
+                symbols=batch,
+            )
+        except Exception:
+            continue
+        for _sym, data in analysis.items():
+            if data is None:
+                continue
+            try:
+                o = data.indicators.get("open")
+                c = data.indicators.get("close")
+                if not o or not c or o <= 0:
+                    continue
+                changes.append(((c - o) / o) * 100)
+            except Exception:
+                continue
+    if not changes:
+        return None
+    return sum(1 for c in changes if c < target_change) / len(changes)
+
+def generate_egx_trade_plan(
+    symbol: str,
+    timeframe: str = "1D",
+    universe: str = "EGX100",
+) -> dict:
     """
     Generate a full trade plan for a specific EGX stock.
 
     Args:
         symbol:    EGX stock symbol (e.g. 'COMI'). Will be prefixed with EGX:.
         timeframe: TradingView interval (default '1D').
+        universe:  Index universe used to compute the cross-sectional
+                   `change_pct_rank` feeding compute_stock_score's relative
+                   performance section. One of 'EGX30', 'EGX70', 'EGX100',
+                   'SHARIAH33', 'EGX35LV', 'TAMAYUZ', 'ALL', or '' (skip
+                   rank — standalone score, max 85). Default 'EGX100' so the
+                   score matches `screen_egx_stocks(index_filter='EGX100')`
+                   for the same stock. Universe fetches are cached for 60s.
 
     Returns:
         Complete plan: stock score, setup, stop-loss, targets, quality, and S/R.
@@ -915,7 +986,24 @@ def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
         return {"error": f"Could not compute metrics for {full_symbol}"}
 
     ccy = get_currency(full_symbol)
-    score_result = compute_stock_score(ind, currency=ccy)
+
+    target_open = ind.get("open")
+    target_close = ind.get("close")
+    pct_rank: Optional[float] = None
+    universe_used = "none"
+    if target_open and target_close and target_open > 0:
+        target_change = ((target_close - target_open) / target_open) * 100
+        universe_symbols = _resolve_egx_universe(universe)
+        if universe_symbols:
+            pct_rank = _compute_egx_universe_pct_rank(
+                target_change=target_change,
+                universe_symbols=universe_symbols,
+                timeframe=timeframe,
+            )
+            if pct_rank is not None:
+                universe_used = (universe or "").strip().upper() or "ALL"
+
+    score_result = compute_stock_score(ind, change_pct_rank=pct_rank, currency=ccy)
     if not score_result:
         return {"error": f"Could not compute stock score for {full_symbol}"}
 
@@ -944,6 +1032,8 @@ def generate_egx_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
         "ema": extended["ema"],
         "bollinger_bands": extended["bollinger_bands"],
         "tv_recommendation": extended["tv_recommendation"],
+        "score_universe": universe_used,
+        "change_pct_rank": round(pct_rank, 3) if pct_rank is not None else None,
     }
 
     if setup:

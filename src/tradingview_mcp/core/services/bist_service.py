@@ -898,13 +898,84 @@ def screen_bist_stocks(
 
 # ── Trade Plan ─────────────────────────────────────────────────────────────────
 
-def generate_bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
+def _resolve_bist_universe(universe: str) -> Optional[List[str]]:
+    """Return the list of BIST symbols for a named universe, or None if unknown.
+
+    Accepts 'BIST30' / 'BIST50' / 'BIST100' / 'ALL'. Empty string is treated
+    as a signal to skip rank scoring (caller's responsibility to interpret).
+    """
+    key = (universe or "").strip().upper()
+    if not key:
+        return None
+    if key == "ALL":
+        return load_symbols("bist") or None
+    from tradingview_mcp.core.data.bist_indices import BIST_INDICES
+    if key in BIST_INDICES:
+        syms = BIST_INDICES[key]["get_symbols"]()
+        return syms or None
+    return None
+
+
+def _compute_bist_universe_pct_rank(
+    target_change: float,
+    universe_symbols: List[str],
+    timeframe: str,
+) -> Optional[float]:
+    """Compute target stock's percentile rank (0.0-1.0) of day-change among
+    a BIST universe. Returns None if no universe data is available.
+
+    Mirrors the rank logic in `screen_bist_stocks` so a trade_plan call with
+    the same universe yields the same `change_pct_rank` (and therefore the
+    same stock_score) the screener would produce. Universe fetches go through
+    `get_multiple_analysis`, which has a 60s TTL cache, so repeated calls in
+    the same window are cheap.
+    """
+    changes: List[float] = []
+    batch_size = 200
+    for i in range(0, len(universe_symbols), batch_size):
+        batch = universe_symbols[i : i + batch_size]
+        try:
+            analysis = get_multiple_analysis(
+                screener=_BIST_SCREENER_MARKET,
+                interval=timeframe,
+                symbols=batch,
+            )
+        except Exception:
+            continue
+        for _sym, data in analysis.items():
+            if data is None:
+                continue
+            try:
+                o = data.indicators.get("open")
+                c = data.indicators.get("close")
+                if not o or not c or o <= 0:
+                    continue
+                changes.append(((c - o) / o) * 100)
+            except Exception:
+                continue
+    if not changes:
+        return None
+    return sum(1 for c in changes if c < target_change) / len(changes)
+
+
+def generate_bist_trade_plan(
+    symbol: str,
+    timeframe: str = "1D",
+    universe: str = "BIST100",
+) -> dict:
     """
     Generate a full trade plan for a specific BIST stock.
 
     Args:
         symbol:    BIST stock symbol (e.g. 'THYAO'). Will be prefixed with BIST:.
         timeframe: TradingView interval (default '1D').
+        universe:  Index universe used to compute the cross-sectional
+                   `change_pct_rank` feeding compute_stock_score's relative
+                   performance section. One of 'BIST30', 'BIST50', 'BIST100',
+                   'ALL', or '' (skip rank — standalone score, max 85).
+                   Default 'BIST100' so the score matches
+                   `screen_bist_stocks(index_filter='BIST100')` for the same
+                   stock. Universe fetches are cached for 60s.
 
     Returns:
         Complete plan: stock score, setup, stop-loss, targets, quality, and S/R.
@@ -934,7 +1005,25 @@ def generate_bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
         return {"error": f"Could not compute metrics for {full_symbol}"}
 
     ccy = get_currency(full_symbol)
-    score_result = compute_stock_score(ind, currency=ccy)
+
+    # Cross-sectional rank: match screener's score by using the same universe.
+    target_open = ind.get("open")
+    target_close = ind.get("close")
+    pct_rank: Optional[float] = None
+    universe_used = "none"
+    if target_open and target_close and target_open > 0:
+        target_change = ((target_close - target_open) / target_open) * 100
+        universe_symbols = _resolve_bist_universe(universe)
+        if universe_symbols:
+            pct_rank = _compute_bist_universe_pct_rank(
+                target_change=target_change,
+                universe_symbols=universe_symbols,
+                timeframe=timeframe,
+            )
+            if pct_rank is not None:
+                universe_used = (universe or "").strip().upper() or "ALL"
+
+    score_result = compute_stock_score(ind, change_pct_rank=pct_rank, currency=ccy)
     if not score_result:
         return {"error": f"Could not compute stock score for {full_symbol}"}
 
@@ -963,6 +1052,8 @@ def generate_bist_trade_plan(symbol: str, timeframe: str = "1D") -> dict:
         "ema": extended["ema"],
         "bollinger_bands": extended["bollinger_bands"],
         "tv_recommendation": extended["tv_recommendation"],
+        "score_universe": universe_used,
+        "change_pct_rank": round(pct_rank, 3) if pct_rank is not None else None,
     }
 
     if setup:
